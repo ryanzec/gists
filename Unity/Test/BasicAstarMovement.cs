@@ -16,6 +16,7 @@ namespace UGPXFramework.Unity {
     public Vector3? NextPosition = null;
     public List<GraphNode> CachedNodes;
     public GridGraph GridGraph;
+    public ABPath CurrentPath;
 
     // @todo not sure where this should live
     GameObject PathRendererGO;
@@ -27,6 +28,16 @@ namespace UGPXFramework.Unity {
     }
 
     public void Update() {
+      if (CurrentPath != null) {
+        if (CurrentPath.CompleteState != PathCompleteState.Complete) {
+          return;
+        }
+
+        // @todo check and handle for CurrentPath.error
+
+        StorePathNodes();
+      }
+
       if (CalculatePath) {
         UpdateNextPosition();
 
@@ -71,22 +82,28 @@ namespace UGPXFramework.Unity {
         return;
       }
 
-      ABPath path = ABPath.Construct(transform.position, (Vector3)MoveTo);
+      CurrentPath = ABPath.Construct(transform.position, (Vector3)MoveTo);
 
-      AstarPath.StartPath(path);
+      AstarPath.StartPath(CurrentPath);
 
-      // makes the path calculation sync instead of async (why again???)
-      path.BlockUntilCalculated();
-
-      if (path.error) {
-        Debug.LogFormat("No path was found ({0})", path.error);
+      if (CurrentPath.error) {
+        Debug.LogFormat("No path was found: {0}", CurrentPath.errorLog);
 
         NextPosition = null;
+        CurrentPath = null;
+
+        return;
+      }
+    }
+
+    public void StorePathNodes() {
+      if (CurrentPath == null) {
+        Debug.LogFormat("could not store path nodes since there is no current path to get the nodes from");
 
         return;
       }
 
-      CachedNodes = path.path;
+      CachedNodes = CurrentPath.path;
 
       // this makes sure that the pawn fully moves to the selected location and that the path does not change as to
       // the next path mid way which can cause the pawn to wiggle back and forth as it move to the next location
@@ -98,7 +115,7 @@ namespace UGPXFramework.Unity {
       if (CachedNodes.Count > 0) {
         CachedNodes.RemoveAt(0);
       }
-      
+
       NextPosition = CachedNodes.Count == 0 ? null : (Vector3?)CachedNodes[0].position;
     }
 
@@ -108,20 +125,12 @@ namespace UGPXFramework.Unity {
     }
 
     public bool HasBlockingNodeAhead() {
-      bool hasBlockingPath = false;
-      List<GraphNode> checkNodes = CachedNodes.GetRange(0, Math.Min(CachedNodes.Count, NodesToCheckAheadForBlocking));
-
-      foreach(var node in checkNodes) {
-        Vector3 nodePosition = (Vector3)node.position;
-
-        if (!GridGraph.GetNode((int)nodePosition.x, (int)nodePosition.y).Walkable) {
-          hasBlockingPath = true;
-
-          break;
-        }
+      for (int i = 0; i < NodesToCheckAheadForBlocking && i < CachedNodes.Count; i++) {
+        if (!CachedNodes[i].Walkable)
+          return true;
       }
 
-      return hasBlockingPath;
+      return false;
     }
   }
 }
