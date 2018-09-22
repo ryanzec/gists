@@ -16,7 +16,7 @@ namespace UGPXFramework.Unity {
     public Vector3? NextPosition = null;
     public List<GraphNode> CachedNodes;
     public GridGraph GridGraph;
-    public ABPath CurrentPath;
+    public Seeker Seeker;
 
     // @todo not sure where this should live
     GameObject PathRendererGO;
@@ -24,20 +24,11 @@ namespace UGPXFramework.Unity {
     public void Awake() {
       // @todo should probably not sure name searching
       PathRendererGO = GameObject.Find("PathRenderer");
+      Seeker = GetComponent<Seeker>();
       GridGraph = AstarPath.active.data.gridGraph;
     }
 
     public void Update() {
-      if (CurrentPath != null) {
-        if (CurrentPath.CompleteState != PathCompleteState.Complete) {
-          return;
-        }
-
-        // @todo check and handle for CurrentPath.error
-
-        StorePathNodes();
-      }
-
       if (CalculatePath) {
         UpdateNextPosition();
 
@@ -82,28 +73,20 @@ namespace UGPXFramework.Unity {
         return;
       }
 
-      CurrentPath = ABPath.Construct(transform.position, (Vector3)MoveTo);
-
-      AstarPath.StartPath(CurrentPath);
-
-      if (CurrentPath.error) {
-        Debug.LogFormat("No path was found: {0}", CurrentPath.errorLog);
-
-        NextPosition = null;
-        CurrentPath = null;
-
-        return;
-      }
+      Seeker.StartPath(transform.position, (Vector3)MoveTo, OnPathComplete);
     }
 
-    public void StorePathNodes() {
-      if (CurrentPath == null) {
-        Debug.LogFormat("could not store path nodes since there is no current path to get the nodes from");
+    public void OnPathComplete(Path completedPath) {
+      if (completedPath.error) {
+        Debug.LogFormat("No path was found: {0}", completedPath.errorLog);
+
+        NextPosition = null;
+        //CurrentPath = null;
 
         return;
       }
 
-      CachedNodes = CurrentPath.path;
+      CachedNodes = completedPath.path;
 
       // this makes sure that the pawn fully moves to the selected location and that the path does not change as to
       // the next path mid way which can cause the pawn to wiggle back and forth as it move to the next location
